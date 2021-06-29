@@ -14,7 +14,5 @@ module.exports = (client) => {
       }
   client.on("ready", async () => {
       require("../utilities/server/keepalive");
-      //require("../utilities/server")(client);
-    util.Log().success("Database Ping", await client.quickdb.ping())
   })
 }
