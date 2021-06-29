@@ -1,0 +1,30 @@
+const Discord = require("discord.js-light");
+
+module.exports = (client) => {
+    client.on('message', async (message) => {
+		try {
+      if(!message.author || !message.content || message.author.bot || message.author.id === client.user.id) return;
+    const languages = message.languages = client.getLangs(message.guild);
+    if(languages[message.author.id]) message.languages = languages[message.author.id];
+    const prefixMention = new RegExp(`^(?:(?:(?:hey|yo|ok),? )?${client.user.username.fixedUsername()},?|<@!?${client.user.id}>|${client.user.username.fixedUsername()}|<@!?${message.author.id}> idk|${message.author.username.fixedUsername()} idk)( |)$`);
+    if (message.content.match(prefixMention)) {
+        const embed = client.util.BaseEmbed(message)
+            .setTitle(await client.functions.translate(message, "Quick Info"))
+            .setDescription(await client.functions.translate(message, `You can use your username to get my commands!`))
+            .addField(await client.functions.translate(message, "Usage"), `\`\`\`<(@user|username)> cmd <commands>\`\`\``)
+            .addField(await client.functions.translate(message, "Example"), `\`\`\`${message.author.username} cmd help\`\`\``)
+            .addField("======================================", "᲼᲼᲼᲼᲼᲼")
+            .addField(await client.functions.translate(message, "Prefix"), client.getSettings(message.guild).prefix.value)
+            .addField(await client.functions.translate(message, "Versions"), [
+              `**Node.js Version:** ${process.version}`,
+              `**Discord.js Version:** v${Discord.version}`
+            ].join("\n"))
+        message.channel.send(embed);
+    }
+
+		} catch(e) {
+			client.util.Log().error("Quickinfo Module", `${e.name}: ${e.stack}`);
+		}
+	})
+
+}

@@ -1,0 +1,33 @@
+
+const Discord = require("discord.js-light"),
+fetch = require("node-fetch"),
+cheerio = require("cheerio");
+
+module.exports = (client) => {
+    try{
+        client.on("message", async message => {
+        if(!message.guild || !message.author || !message.content || message.author.bot || message.author.id === client.user.id) return;
+
+            let channel = await client.util.searchChannel(message, "translate");
+
+            if(channel) {
+            if(!(channel.id === message.channel.id)) return;
+                    const $ =  await fetch(`https://translate.google.com/m?sl=auto&tl=tl&hl=en-US&q=${encodeURIComponent(message.content)}`)
+                    .then((res) => res.text())
+                    .then((html) => cheerio.load(html));
+
+                    const results = $("div.result-container").text();
+                    const lang = $("div.sl-and-tl a").last().text();
+
+                    const embed = new Discord.MessageEmbed()
+                    .setTitle("Translated.")
+                    .addField("Original Text", "```\n" + message.content + "```")
+                    .addField("Translated Text", `Language: ${lang}\n` + "```\n" + results + "```");
+
+                    return message.send(embed);
+            }
+        })
+    } catch (e) {
+        client.util.Log().error("Translator Module", `${e.name}: ${e.stack}`);
+    }
+}

@@ -1,0 +1,159 @@
+const radio = require("./stations.json");
+
+exports.run = async (client, message, Discord, args) => {
+  try { // Put your Code below.
+
+    const voiceChannel = message.member.voice.channel;
+    if(!voiceChannel) return message.inlineReply("You need to be in a voice channel to play music!", { allowedMentions: { repliedUser: false } });
+    const serverQueue = client.station.get(message.guild.id);
+
+    const Method = args[0] ? args[0].toLowerCase() : "";
+    switch (Method) {
+    case "play":
+        return execute(message, args.slice(1));
+    case "volume":
+        return volume(message, args.slice(1));
+    case "skip":
+        return skip(message, serverQueue);
+    case "stop":
+        return stop(message, serverQueue);
+    default : {
+      const embed = client.util.BaseEmbed(message)
+      .setTitle("Play Stream Radio")
+      .setURL(client.config.radioURL)
+      .setDescription("You need to select channel!")
+      for(var stn in radio) {
+        stnName = radio[stn].name;
+        embed.addField(`❯ ${stnName}`, [
+          `\`${message.client.user.username} radio play ${radio[stn].alias}\``
+        ]);
+      }
+     return message.inlineReply({ embed: embed, allowedMentions: { repliedUser: false } });
+    }
+    }
+
+    async function execute(message, [station]) {
+      let url;
+      let name;
+      let image;
+      let stream;
+      let found = false;
+      Object.keys(radio).forEach(function(stn) {
+        if(radio[stn].alias.includes(station)) {
+          url = radio[stn].link;
+          name = radio[stn].name;
+          image = radio[stn].image;
+          stream = radio[stn].stream;
+          found = true;
+        }
+      });
+
+      if (!found) return message.inlineReply(await client.functions.translate(message, "No search results found, maybe try searching for something that exists."), { allowedMentions: { repliedUser: false } });
+        const song = {
+          title: name,
+          link: url,
+          image: image,
+          url: stream,
+        };
+        if(!serverQueue) {
+          const queueContruct = {
+            textChannel: message.channel,
+            voiceChannel: voiceChannel,
+            connection: null,
+            songs: [],
+            volume: 3,
+            playing: true
+          };
+          client.station.set(message.guild.id, queueContruct);
+          queueContruct.songs.push(song);
+          try {
+            var connection = await voiceChannel.join();
+            queueContruct.connection = connection;
+            play(message.guild, queueContruct.songs[0]);
+          } catch(err) {
+            console.log(err);
+            client.station.delete(message.guild.id);
+            return message.inlineReply(err, { allowedMentions: { repliedUser: false } });
+          }
+        } else {
+          serverQueue.songs.push(song);
+          return message.inlineReply(`\`📻\` **${song.title}** has been added to the queue.`, { allowedMentions: { repliedUser: false } });
+        }
+    }
+
+    function volume(message, [volume]){
+      const serverQueue = client.station.get(message.guild.id)
+      if(!serverQueue || !serverQueue.songs) return message.inlineReply("`❌` I am not currently streaming radio station.", { allowedMentions: { repliedUser: false } })
+      const {channel} = message.member.voice;
+      if(serverQueue && channel !== message.guild.me.voice.channel) return message.inlineReply(` \`❌\` You must be in the same voice channel as the bot to use this command!`, { allowedMentions: { repliedUser: false } });
+      if(!volume) return message.inlineReply("`🔊` The volume is now " + serverQueue.volume, { allowedMentions: { repliedUser: false } });
+       volume = parseInt(volume)
+      if(volume >= 10) {
+        volume = 10
+      }
+      serverQueue.volume = volume;
+      serverQueue.connection.dispatcher.setVolumeLogarithmic(volume / 10);
+      return message.inlineReply("`🔊` The volume is now " + volume, { allowedMentions: { repliedUser: false } });
+    }
+
+    function skip(message, serverQueue) {
+      if(!serverQueue || !serverQueue.songs) return message.inlineReply("`❌` I am not currently streaming radio station.", { allowedMentions: { repliedUser: false } })
+      const {channel} = message.member.voice;
+      if(serverQueue && channel !== message.guild.me.voice.channel) return message.inlineReply(` \`❌\` You must be in the same voice channel as the bot to use this command!`, { allowedMentions: { repliedUser: false } });
+      if(!message.member.voice.channel) return message.inlineReply("You have to be in a voice channel to stop the music!");
+      if(!serverQueue) return message.inlineReply("There is no song that I could skip!");
+      return serverQueue.connection.dispatcher.end();
+    }
+
+    function stop(message, serverQueue) {
+      if(!serverQueue || !serverQueue.songs) return message.inlineReply("`❌` I am not currently streaming radio station.")
+      const {channel} = message.member.voice;
+      if(serverQueue && channel !== message.guild.me.voice.channel) return message.inlineReply(` \`❌\` You must be in the same voice channel as the bot to use this command!`, { allowedMentions: { repliedUser: false } });
+      if(!message.member.voice.channel) return message.inlineReply("You have to be in a voice channel to stop the music!", { allowedMentions: { repliedUser: false } });
+      serverQueue.songs = [];
+      return serverQueue.connection.dispatcher.end();
+    }
+
+    function play(guild, song) {
+      const serverQueue = client.station.get(guild.id);
+      if(!song) {
+        serverQueue.voiceChannel.leave();
+        client.station.delete(guild.id);
+        return;
+      }
+      const dispatcher = serverQueue.connection.play(song.url).on("finish", () => {
+        serverQueue.songs.shift();
+        play(guild, serverQueue.songs[0]);
+      }).on("error", error => console.error(error));
+      dispatcher.setVolumeLogarithmic(serverQueue.volume / 10);
+      return serverQueue.textChannel.send(`\`📻\` You are now listening to **${song.title}**.`, { allowedMentions: { repliedUser: false } });
+    }
+
+  } catch (e) { // End of the Code.
+    client.functions.sendLogs(message, e, "error");
+  }
+};
+
+exports.help = {
+  name: "radio",
+  description: "Play stream radio",
+  examples: [],
+  usage: ["<option(play|volume|skip|stop)>", "<key>"],
+  type: []
+};
+
+exports.conf = {
+  aliases: [],
+  cooldown: 5, // This number is a seconds, not a milliseconds.
+  // 1 = 1 seconds.
+};
+
+exports.requirements = {
+  owner: false,
+  guildOnly: true,
+  nsfwOnly: false,
+  usage: false,
+  type: false,
+  bot: ["CONNECT", "SPEAK"],
+  user: []
+};

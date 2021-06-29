@@ -1,0 +1,86 @@
+const Discord = require("discord.js-light"),
+ { stripIndents } = require("common-tags"),
+ // whatanime functionality
+ wa = require(process.cwd() + "/storage/whatanime.js");
+
+module.exports = (client) => {
+    client.on("message", async (message) => {
+		try {
+      if(!message.author || !message.content || message.author.bot || message.author.id === client.user.id) return;
+    
+    /**const guessReg = [
+        `(what( *)anime( *)is( *)this)`,
+        `(anyone( *)kno)`,
+    ];
+    const guess = new RegExp(guessReg.join("|"), "i");*/
+
+    if (!(message.content.includesAll(["what","anime","is"]))) return;
+        let screenshot;
+        let image = new RegExp(/(http(|s):.*\.(jpg|png|jpeg|gif))/i);
+        if (image.test(message.content)) {
+          screenshot = message.content.split(image)[1];
+        } else
+        if(message.attachments.first()) {
+            screenshot = message.attachments.first().url;
+        } else
+        if(message.mentions.users.first()) {
+            screenshot = message.mentions.users.first().displayAvatarURL({size: 4096, format: "png" });
+        } else {
+           screenshot = null; 
+        }
+        if(!screenshot) return console.log("Please upload a image or mention a user!");
+
+
+
+    const b64 = await wa.imgtob64(screenshot)
+    var json = {};
+    try {
+        json = await wa.callapi(b64)
+    } catch (e) {
+           const embed = {
+                author: {
+                    name: message.author.username,
+                    icon_url: message.author.avatarURL
+                },
+                title: "Uh oh",
+                color: 0xFF0000,
+                fields: [
+                    { name: "Error", value: "Couldn't reach trace.moe or we have hit rate limits. Try again later!", inline: true },
+                ],
+                footer: { 
+                    text: "Anime found with trace.moe",
+                    icon_url: "https://trace.moe/favicon.png"
+                },
+                thumbnail: { url: screenshot }
+            }
+        return message.channel.send({ embed: embed });;
+    }
+
+    const anime = await wa.parsejson(json)
+      const embed = {
+            author: {
+                name: message.author.username,
+                icon_url: message.author.avatarURL
+            },
+            url: anime.link,
+            title: anime.title_romaji,
+            color: 0xFF0000,
+            fields: [
+                { name: "Romaji title", value: anime.title_romaji, inline: true },
+                { name: "Japanese title", value: anime.title_japanese, inline: false },
+                { name: "Episode", value: anime.episode, inline: false },
+                { name: "At", value: anime.at, inline: true } 
+            ],
+            footer: { 
+                text: "Anime found with trace.moe",
+                icon_url: "https://trace.moe/favicon.png"
+            },
+            thumbnail: { url: screenshot }
+        }
+        return message.channel.send({ embed: embed });
+		} catch(e) {
+			client.util.Log().error("What Anime Module", `${e.name}: ${e.stack}`);
+		}
+	})
+
+}

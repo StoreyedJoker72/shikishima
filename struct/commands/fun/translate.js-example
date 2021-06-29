@@ -1,0 +1,60 @@
+exports.run = async (client, message, Discord, [language, ...value]) => { // eslint-disable-line no-unused-vars
+  try { // Put your Code Here.
+
+    message.inlineReply(await translate(message, value.join(" "), language), { allowedMentions: { repliedUser: false } });
+
+    async function translate (message, text, language) {
+      /**
+        return message.channel.send(await translate(message, "hello world", "en"));
+        Logs: hello world
+      */
+        if(!message) {
+          throw new ReferenceError("Shikishima => 'message' must be passed down as param! (translate)");
+        }
+        if(!text) {
+          throw new ReferenceError("Shikishima => 'text' must be passed down as param! (translate)");
+        }
+        if(!language) {
+          throw new ReferenceError("Shikishima => 'language' must be passed down as param! (translate)");
+        }
+        const fetch = require("node-fetch"),
+        cheerio = require("cheerio");
+
+        const body = await fetch(`https://translate.google.com/m?sl=auto&tl=${language}&hl=en-US&q=${encodeURIComponent(text)}`)
+        .then((res) => res.text())
+        .then((html) => cheerio.load(html));
+        if (!body) return "I could'nt find that languages, maybe try something that really exists.";
+        const results = body("div.result-container").text();
+        const lang = body("div.sl-and-tl a").last().text();
+
+        return results;
+
+      }
+    } catch (e) { // End of the Code.
+    client.functions.sendLogs(message, e, "error");
+  }
+};
+
+exports.help = {
+  name: "translate",
+  description: "Give me a word, i will gonna translate it.",
+  examples: [],
+  usage: ["content", "language"],
+  type: []
+};
+
+exports.conf = {
+  aliases: [],
+  cooldown: 5, // This number is a seconds, not a milliseconds.
+  // 1 = 1 seconds.
+};
+
+exports.requirements = {
+  owner: false,
+  guildOnly: true,
+  nsfwOnly: false,
+  usage: false,
+  type: false,
+  client: [],
+  user: [],
+};

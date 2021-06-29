@@ -1,0 +1,733 @@
+
+const Discord = require("discord.js-light"),
+fetch = require("node-fetch"),
+axios = require("axios"),
+ms = require("ms"),
+{ CHATBOT_ID, CHATBOT_KEY } = process.env;
+
+const type = phrase => {
+  // !phrase would be triggered with 0, so we check if it is undefined or not.
+  if (phrase === undefined || !phrase.length) return undefined;
+
+  // Parse the input phrase to time format.
+  if (ms(phrase) === 0 || ms(phrase) > 1000) return ms(phrase);
+
+  // This will store the final parsed time.
+  let parsedTime = 0;
+  // Split the input time by spaces.
+  const words = phrase.split(' ');
+  for (const word of words) {
+    if (ms(word) === 0 || ms(word) > 1000) parsedTime += ms(word);
+    else return undefined;
+  }
+  return parsedTime;
+}
+
+module.exports = (client) => {
+  try {
+    client.on("message", async message => {
+      if( !message.author || !message.content || message.author.bot || message.author.id === client.user.id) return;
+      if (!message.channel.permissionsFor(message.guild.me).has(["SEND_MESSAGES"])) return;
+
+      //Checking cleverbot feature to be enabled.
+      let setting = await message.client.quickdb.get(`channels.${message.guild.id}.cleverbot`);
+      let channel = await client.util.searchChannel(message, setting);
+      let cooldown = "1s";
+
+      //So we going to get bot prefix
+      let serverPrefix = await message.client.quickdb.get(`settings.${message.guild.id}.prefix`);
+      const mentionRegex = new RegExp(`^(<@!?${client.user.id}>|${client.user.username.fixedUsername()})`, "i", "(\s+)?");
+      const commandRegex = new RegExp(`^(${serverPrefix ?`${serverPrefix}|`: ""}<@!?${client.user.id}>|${client.user.username.fixedUsername()}|${message.client.user.username}|<@!?${message.author.id}> cmd|${message.author.username.fixedUsername()} cmd)`, "i", "(\s+)?");
+
+      //Check if used commands
+      if(!(channel && channel.id === message.channel.id)){
+        usedPrefix = message.content.match(mentionRegex);
+        usedPrefix = usedPrefix && usedPrefix.length && usedPrefix[0];
+      if(!(message.mentions.users.first().id === client.user.id) && !usedPrefix) return;
+      } else {
+        usedPrefix = message.content.match(commandRegex);
+        usedPrefix = usedPrefix && usedPrefix.length && usedPrefix[0];
+        if(usedPrefix) return;
+      }
+
+      //Check if your using prefix or not
+      let args, commandName, params, text;
+      if(usedPrefix) {
+        args = message.content.slice(usedPrefix.length).trim().split(/ +/g);
+        commandName = args[0].toLowerCase();
+        params = args.join(" ").toLowerCase();
+      } else {
+        params = message.content.trim().toLowerCase();
+        args = message.content.trim().split(/ +/g);
+        commandName = args.shift().toLowerCase();
+      }
+      if(commandName.length){
+        let commands = client.commands.get(commandName) || client.commands.get(client.aliases.get(commandName)) || undefined;
+        if(commands || await message.client.quickdb.get(`tag.${message.guild.id}.${commandName}`)) {
+          
+            /*// Start typing
+            message.channel.startTyping();
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type(cooldown) / 1000);
+            }
+            // Add a 2s delay
+            await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+     
+            message.inlineReply([
+            "Oof, i'm not allowed to used my commands while chatting on you.",
+            "Shut up! my sensei not allowed me to use my commands while chatting on you.",
+            "Trying to use my commands? well, i'm lazy to do that.",
+            "Nope, nope, nope.. use my commmands later.",
+            "Nope, i don't wanna use my commands.",
+            "Lets enjoy chatting each other, just use my commands later."
+            ].random(), { allowedMentions: { repliedUser: false } });
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }*/
+            return message.channel.stopTyping();
+        }
+      }
+      //important
+      text = params;
+      if (!(typeof text === "string")) return;
+      //console.log(`arguments:  ${args.join(" ").toLowerCase()}\ncommand: ${commandName}\nparams: ${text}`);
+      if(text) text = text.replace(/@(everyone)/gi, "everyone").replace(/@(here)/gi, "here");
+      let mention = new RegExp(/^(?:<@!?)?(\d{17,19})>/gi);
+      let master = await client.util.searchUser(message, "817238971255488533");
+
+        const dmRegex = ["((please|pls)( *)(dm|chat)( *))","(can( *)you( *)(dm|chat)( *))", "(dm( *))"];
+        const dmMention = new RegExp(dmRegex.join("|"), "i");
+        if(text.match(dmMention)) {
+          if(!(text.match(mention)) && text.includes("me")) {
+            //console.log("you dont mention anyone.")
+            return message.author.send([
+            "What do you want?",
+            "How may I help you?",
+            "Master? What the hell you want me to do.",
+            "What can I do to assist you?",
+            "What can I do for you?"
+            ].random())
+          }
+
+          if(!(text.match(mention))) {
+            // Start typing
+            message.channel.startTyping();
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type(cooldown) / 1000);
+            }
+            // Add a 2s delay
+            await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+            message.inlineReply([
+            "Mention the user, you want to dm bruh...",
+            "Who do you want to dm, Master?",
+            "You forgot to mention the user, try again later...",
+            "Daheck? you want to dm and u did'nt mention the user? fck..",
+            "Are you a Simp? who the hell that person that you want to dm."
+            ].random(), { allowedMentions: { repliedUser: false } });
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+            return message.channel.stopTyping();
+          }
+          const param = text.replace(dmMention, "");
+          const id = mention.exec(param)[1];
+          const content = param.replace(id, "").replace("<@!> ", "");
+          //console.log("content: " + content + " param: " + param + " id: " + id);
+          let user = await client.util.searchUser(message, id);
+          return user.send(content);
+        }
+
+        /**if(text.toLowerCase().includesOf(["template"])) { ///////Template
+            // Start typing
+            message.channel.startTyping();
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type(cooldown) / 1000);
+            }
+            // Add a 2s delay
+            await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+            message.inlineReply(text, { allowedMentions: { repliedUser: false } });
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+            return message.channel.stopTyping();
+        }*/
+
+        if(text.toLowerCase().includesOf(["reaction", "r"])) {
+          if(text.toLowerCase().includesOf(["-role", "role", "rr"])) {
+            if(text.toLowerCase().includesOf(["create", "add", "set", "make"])) {
+              console.log("passed")
+              let reaction = await client.functions.awaitReaction(message, "Add an reaction of the message that you want to make a reaction role.");
+              if(!(reaction)) return;
+              let role = await client.functions.awaitReply(message, `Then what was the role that should be added when users react?`);
+              if (!role) return;
+              role = await await client.util.searchRole(message, role);
+              if(!role) return;
+              const save = {
+                reaction : {
+                  emoji : {
+                    id: reaction.emoji.id,
+                    name: require("node-emoji").unemojify(reaction.emoji.name)
+                  },
+                  role: role.id
+                },
+                channel : reaction.channel_id,
+                message : reaction.message_id
+              }
+              await message.client.quickdb.set(`reaction.${message.guild.id}`, save);
+              return console.log(save);
+              // Add a 2s delay
+              await new Promise(resolve => setTimeout(resolve,  ms(cooldown)));
+            }
+          }
+        }
+
+        if(text.toLowerCase().includesOf(["giveaway", "giveaways", "give-away", "give-aways"])) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+          if(text.toLowerCase().includesOf(["start", "run", "create", "publish"])) {
+            let start = await client.functions.awaitReply(message, `Would you like create an giveaway?`);
+            if(!start) {
+              
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+              return message.channel.stopTyping(); 
+            }
+            if(!(start.includesOf(client.yes))) {
+              message.inlineReply("`❌` It appears that you did not say **yes**, thus cancelling the command.", { allowedMentions: { repliedUser: false } });
+              
+              if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+                await message.channel.setRateLimitPerUser(type("clear") / 1000);
+              }
+              return message.channel.stopTyping();
+            }
+            const ms = require("parse-duration");
+            //setup giveaway
+            let time = await client.functions.awaitReply(message, `How long do you want the giveaway to last?`);
+            if(!time) return;
+            if (!ms(time)) return message.inlineReply("`❌` An invalid time was provided, try again", { allowedMentions: { repliedUser: false } });
+            if (ms(time) > 2.628e+9) return message.inlineReply("`❌` The time cant be longer than 1 month, please try again", { allowedMentions: { repliedUser: false } });
+            let prize = await client.functions.awaitReply(message, `What do you want the prize to be?`);
+            if(!prize) return;
+            if (prize.length > 30) return message.inlineReply("`❌` You must not provide a prize name of over 30 characters, try again but with a shorter name", { allowedMentions: { repliedUser: false } });
+            let wincount = await client.functions.awaitReply(message, `How many users can win on this giveaway?`);
+            if(!wincount) return;
+            if (isNaN(wincount) || parseInt(wincount) <= 0) return message.inlineReply("`❌` You must provide a valid amount of winners, try again", { allowedMentions: { repliedUser: false } });
+            if (wincount > 100) return message.inlineReply("`❌` You cant have more than 100 winners", { allowedMentions: { repliedUser: false } });
+
+            // Start typing
+            message.channel.startTyping();
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type(cooldown) / 1000);
+            }
+            await giveaways(message, message.channel, { time: ms(time), prize: prize, winnerCount: parseInt(wincount) });
+
+            async function giveaways(message, channel, { time = 10000, prize = undefined, winners = parseInt(1) } = {}){
+              const { utc } = require("moment");
+              const { shuffle } = require("lodash");
+
+              if(!message)  throw new ReferenceError("Shikishima => 'message' must be passed down as param! (giveaways)");
+              if(!channel)  throw new ReferenceError("Shikishima => 'channel' must be passed down as param! (giveaways)");
+              if(!prize)  return message.inlineReply("`❌` Giveaway command time limit exceeded, command cancelled", { allowedMentions: { repliedUser: false } });
+  
+              message.inlineReply("Giveaway started in the current channel!", { allowedMentions: { repliedUser: false } });
+              // Add a 2s delay
+              await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+  
+              const data = {
+                time: time,
+                prize : prize,
+                winners: winners,
+                channel: channel
+              }
+              const embed = client.util.BaseEmbed(message)
+              .setDescription("`🎉` Giveaway")
+              .addField("Details", [
+                `• Prize: ${data.prize}`,
+                `• Winner(s): ${data.winners}`,
+                `• Hosted By: ${message.author}`,
+                `• Started on: ${utc(new Date(Date.now())).format("dddd, MMMM Do YYYY")}`,
+                `• Ending on: ${utc(new Date(Date.now() + data.time)).format("dddd, MMMM Do YYYY")}`,
+              ])
+  
+              let msg = await data.channel.send(embed).catch(() => message.inlineReply("`❌` I don\'t have permissions to send messages in that channel", { allowedMentions: { repliedUser: false } }))
+              if (!msg) return;
+              msg.react("🎉");
+              var save = {...data, startedAt: Date.now(), messageID: msg.id, embed: embed };
+              console.log(save)
+              await message.client.quickdb.set(data.channel.id, save).catch(() => message.inlineReply("`❌` There's an error occured while settling the data to message.client.quickdb.", { allowedMentions: { repliedUser: false } }))
+              console.log(data)
+              setTimeout(async() => {
+                  let newData = await message.client.quickdb.get(data.channel.id);
+                  let winners = shuffle(newData.users).slice(0, data.winners).map(s => `<@${s.id}>`).join(" ");
+  
+                  const embedEnd = client.util.BaseEmbed(message)
+                  .setDescription(`\`🎉\` Giveaway Ended \`🎊\`\n${newData.prize}\n\nWinner(s): ${winners || "Looks like nobody reacted, I was excited to giveaway something!"}`)
+  
+                  data.channel.messages.fetch(newData.messageID).then(toEdit => {
+                      toEdit.edit(embedEnd)
+                  })
+  
+                  setTimeout(async() => {
+										await message.client.quickdb.delete(newData.channel.id)
+                  }, 1.8e+6);
+              }, data.time);
+            }
+          }
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        // Start typing
+        message.channel.startTyping();
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type(cooldown) / 1000);
+            }
+
+        if(text.toLowerCase().includesOf(["ln-title", "ln title", "lightnovel title", "light novel title"])) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+          const { data } = await axios.get(
+          "https://salty-salty-studios.com/shiz/ln.php"
+          );
+          message.inlineReply(["Your light novel title must be", "The title of your light novel will be", "This is your light novel title"].random() + ` *${data.match(/<h1>(.+)<\/h1>/i)[1]}*`, { allowedMentions: { repliedUser: false } }); 
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        if(text.toLowerCase().includesOf(["howcute", "how-cute", "how cute"])) {
+          let number = Math.floor(Math.random() * 100);
+
+          let user = message.mentions.users.first() || message.author;
+
+          let emoji = "";
+          let gif = "";
+
+          if(number < 30){
+          emoji =":face_vomiting:";
+          gif = "https://media.giphy.com/media/g2V8KS4AfwyFq/giphy.gif";
+
+          } else if(number < 40){
+          emoji =":worryed:";
+          gif = "https://media.giphy.com/media/MCQz2S0usAb17DAHkS/giphy.gif";
+
+          } else if(number < 70){
+          emoji =":open_mouth:";
+          gif = "https://media.giphy.com/media/LSiA8wmYOYIaevpS6t/giphy.gif";
+
+          } else if(number < 95){
+          emoji ="😍";
+          gif = "https://media.giphy.com/media/XqPHWAIkmWV0c/giphy.gif";
+
+          } else if(number < 101){
+          emoji ="🥰";
+          gif = "https://media.giphy.com/media/26xBsMYjG4vBob2rC/giphy.gif";
+          }
+
+          const embed = client.util.BaseEmbed(message)
+          .setTitle("Cute-o-Meter!")
+          .addField(`${user.username.toProperCase()} have a percent of... ${number}! ${emoji ? emoji : ""}`)
+          .setImage(gif)
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+          message.inlineReply({ embed: embed, allowedMentions: { repliedUser: false } });
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        if(text.toLowerCase().includesOf(["wy-rather", "wyr", "would-you-rather", "would you rather"])) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+          message.inlineReply([
+          "Would you rather always be 10 minutes late or always be 20 minutes early?",
+          "Would you rather lose all of your money and valuables or all of the pictures you have ever taken?",
+          "Would you rather be able to see 10 minutes into your own future or 10 minutes into the future of anyone but yourself?",
+          "Would you rather be famous when you are alive and forgotten when you die or unknown when you are alive but famous after you die?",
+          "Would you rather go to jail for 4 years for something you didn't do or get away with something horrible you did but always live in fear of being caught?",
+          "Would you rather accidentally be responsible for the death of a child or accidentally be responsible for the deaths of three adults?",
+          "Would you rather your shirts be always two sizes too big or one size too small?",
+          "Would you rather live in the wilderness far from civilization or live on the streets of a city as a homeless person?",
+          "Would you rather the general public think you are a horrible person but your family be very proud of you or your family think you are a horrible person but the general public be very proud of you?",
+          "Would you rather live your entire life in a virtual reality where all your wishes are granted or in the real world?",
+          "Would you rather be alone for the rest of your life or always be surrounded by annoying people?",
+          "Would you rather never use social media sites / apps again or never watch another movie or TV show?",
+          "Would you rather have an easy job working for someone else or work for yourself but work incredibly hard?",
+          "Would you rather be the first person to explore a planet or be the inventor of a drug that cures a deadly disease?",
+          "Would you rather have a horrible short term memory or a horrible long term memory?",
+          "Would you rather be completely invisible for one day or be able to fly for one day?",
+          "Would you rather be locked in a room that is constantly dark for a week or a room that is constantly bright for a week?",
+          "Would you rather be poor but help people or become incredibly rich by hurting people?",
+          "Would you rather live without the internet or live without AC and heating?",
+          "Would you rather have a horrible job, but be able to retire comfortably in 10 years or have your dream job, but have to work until the day you die?",
+          "Would you rather find your true love or a suitcase with five million dollars inside?",
+          "Would you rather be able to teleport anywhere or be able to read minds?",
+          "Would you rather die in 20 years with no regrets or die in 50 years with many regrets?",
+          "Would you rather be feared by all or loved by all?",
+          "Would you rather know when you are going to die or how you are going to die? (You can't change the time or method of your death.)",
+          "Would you rather be transported permanently 500 years into the future or 500 years into the past?",
+          "Would you rather never be able to use a touchscreen or never be able to use a keyboard and mouse?",
+          "Would you rather be able to control fire or water?",
+          "Would you rather have everything you eat be too salty or not salty enough no matter how much salt you add?",
+          "Would you rather have hands that kept growing as you got older or feet that kept growing as you got older?",
+          "Would you rather have unlimited sushi for life or unlimited tacos for life? (both are amazingly delicious and can be any type of sushi / taco you want)",
+          "Would you rather be unable to use search engines or unable to use social media?",
+          "Would you rather give up bathing for a month or give up the internet for a month?",
+          "Would you rather donate your body to science or donate your organs to people who need them?",
+          "Would you rather go back to age 5 with everything you know now or know now everything your future self will learn?",
+          "Would you rather relive the same day for 365 days or lose a year of your life?",
+          "Would you rather have a golden voice or a silver tongue?",
+          "Would you rather be able to control animals (but not humans) with your mind or control electronics with your mind?",
+          "Would you rather suddenly be elected a senator or suddenly become a CEO of a major company. (You won't have any more knowledge about how to do either job than you do right now.)",
+          "Would you rather sell all of your possessions or sell one of your organs?",
+          "Would you rather lose all of your memories from birth to now or lose your ability to make new long term memories?",
+          "Would you rather be infamous in history books or be forgotten after your death?",
+          "Would you rather never have to work again or never have to sleep again (you won't feel tired or suffer negative health effects)?",
+          "Would you rather be beautiful / handsome but stupid or intelligent but ugly?",
+          "Would you rather get one free round trip international plane ticket every year or be able to fly domestic anytime for free?",
+          "Would you rather be balding but fit or overweight with a full head of hair?",
+          "Would you rather be able to be free from junk mail or free from email spam for the rest of your life?",
+          "Would you rather be fluent in all languages and never be able to travel or be able to travel anywhere for a year but never be able to learn a word of a different language?",
+          "Would you rather have an unlimited international first class ticket or never have to pay for food at restaurants?",
+          "Would you rather see what was behind every closed door or be able to guess the combination of every safe on the first try?",
+          "Would you rather live in virtual reality where you are all powerful or live in the real world and be able to go anywhere but not be able to interact with anyone or anything?",
+          "Would you rather never be able to eat meat or never be able to eat vegetables?",
+          "Would you rather give up watching TV / movies for a year or give up playing games for a year?",
+          "Would you rather always be able to see 5 minutes into the future or always be able to see 100 years into the future?",
+          "Would you rather super sensitive taste or super sensitive hearing?",
+          "Would you rather be a practicing doctor or a medical researcher?",
+          "Would you rather be married to a 10 with a bad personality or a 6 with an amazing personality?",
+          "Would you rather never be able to drink sodas like coke again or only be able to drink sodas and nothing else?",
+          "Would you rather have amazingly fast typing / texting speed or be able to read ridiculously fast?",
+          "Would you rather know the history of every object you touched or be able to talk to animals?",
+          "Would you rather be a reverse centaur or a reverse mermaid/merman?",
+          "Would you rather have constantly dry eyes or a constant runny nose?",
+          "Would you rather be a famous director or a famous actor?",
+          "Would you rather not be able to open any closed doors (locked or unlocked) or not be able to close any open doors?",
+          "Would you rather give up all drinks except for water or give up eating anything that was cooked in an oven?",
+          "Would you rather be constantly tired no matter how much you sleep or constantly hungry no matter what you eat? Assuming that there are no health problems besides the feeling of hunger and sleepiness.",
+          "Would you rather have to read aloud every word you read or sing everything you say out loud?",
+          "Would you rather have whatever you are thinking appear above your head for everyone to see or have absolutely everything you do live streamed for anyone to see?",
+          "Would you rather be put in a maximum security federal prison with the hardest of the hardened criminals for one year or be put in a relatively relaxed prison where wall street types are held for ten years?",
+          "Would you rather have a clown only you can see that follows you everywhere and just stands silently in a corner watching you without doing or saying anything or have a real life stalker who dresses like the Easter bunny that everyone can see?",
+          "Would you rather kill one innocent person or five people who committed minor crimes?",
+          "Would you rather have a completely automated home or a self-driving car?",
+          "Would you rather work very hard at a rewarding job or hardly have to work at a job that isn't rewarding?",
+          "Would you rather be held in high regard by your parents or your friends?",
+          "Would you rather be an amazing painter or a brilliant mathematician?",
+          "Would you rather be reincarnated as a fly or just cease to exist after you die?",
+          "Would you rather be able to go to any theme park in the world for free for the rest of your life or eat for free at any drive through restaurant for the rest of your life?",
+          "Would you rather be only able to watch the few movies with a rotten tomatoes score of 95-100% or only be able to watch the majority of movies with a rotten tomatoes score of 94% and lower?",
+          "Would you rather never lose your phone again or never lose your keys again?",
+          "Would you rather have one real get out of jail free card or a key that opens any door?",
+          "Would you rather have a criminal justice system that actually works and is fair or an administrative government that is free of corruption?",
+          "Would you rather have real political power but be relatively poor or be ridiculously rich and have no political power?",
+          "Would you rather have the power to gently nudge anyone's decisions or have complete puppet master control of five people?",
+          "Would you rather have everyone laugh at your jokes but not find anyone else's jokes funny or have no one laugh at your jokes but you still find other people's jokes funny?",
+          "Would you rather be the absolute best at something that no one takes seriously or be well above average but not anywhere near the best at something well respected?",
+          "Would you rather lose the ability to read or lose the ability to speak?",
+          "Would you rather live under a sky with no stars at night or live under a sky with no clouds during the day?",
+          "Would you rather humans go to the moon again or go to mars?",
+          "Would you rather never get angry or never be envious?",
+          "Would you rather have free Wi-Fi wherever you go or be able to drink unlimited free coffee at any coffee shop?",
+          "Would you rather be compelled to high five everyone you meet or be compelled to give wedgies to anyone in a green shirt?",
+          "Would you rather live in a house with see-through walls in a city or in the same see-though house but in the middle of a forest far from civilization?",
+          "Would you rather take amazing selfies but all of your other pictures are horrible or take breathtaking photographs of anything but yourself?",
+          "Would you rather use a push lawn mower with a bar that is far too high or far too low?",
+          "Would you rather be able to dodge anything no matter how fast it's moving or be able ask any three questions and have them answered accurately?",
+          "Would you rather live on the beach or in a cabin in the woods?",
+          "Would you rather lose your left hand or right foot?",
+          "Would you rather face your fears or forget that you have them?",
+          "Would you rather be forced to dance every time you heard music or be forced to sing along to any song you heard?",
+          "Would you rather have skin that changes color based on your emotions or tattoos appear all over your body depicting what you did yesterday?",
+          "Would you rather live in a utopia as a normal person or in a dystopia but you are the supreme ruler?",
+          "Would you rather snitch on your best friend for a crime they committed or go to jail for the crime they committed?",
+          "Would you rather have everything on your phone right now (browsing history, photos, etc.) made public to anyone who Google's your name or never use a cell phone again?",
+          "Would you rather eat a box of dry spaghetti noodles or a cup of uncooked rice?",
+          "Would you rather wake up as a new random person every year and have full control of them for the whole year or once a week spend a day inside a stranger without having any control of them?",
+          "Would you rather be born again in a totally different life or born again with all the knowledge you have now?",
+          "Would you rather be lost in a bad part of town or lost in the forest?",
+          "Would you rather never get a paper cut again or never get something stuck in your eye again?",
+          "Would you rather randomly time travel +/- 20 years every time you fart or teleport to a different place on earth (on land, not water) every time you sneeze?",
+          "Would you rather the aliens that make first contact be robotic or organic?",
+          "Would you rather be famous but ridiculed or be just a normal person?",
+          "Would you rather be an amazing virtuoso at any instrument but only if you play naked or be able to speak any language but only if close your eyes and dance while you are doing it?",
+          "Would you rather have a flying carpet or a car that can drive underwater?",
+          "Would you rather be an amazing artist but not be able to see any of the art you created or be an amazing musician but not be able to hear any of the music you create?",
+          "Would you rather there be a perpetual water balloon war going on in your city / town or a perpetual food fight?",
+          "Would you rather find five dollars on the ground or find all of your missing socks?",
+          "Would you rather never have another embarrassing fall in public or never feel the need to pass gas in public again?",
+          "Would you rather be able to talk to land animals, animals that fly, or animals that live under the water?",
+          "Would you rather lose your best friend or all of your friends except for your best friend?",
+          "Would you rather it be impossible for you to be woken up for 11 straight hours every day but you wake up feeling amazing or you can be woken up normally but never feel totally rested?",
+          ].random(), { allowedMentions: { repliedUser: false } }); 
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        if(text.includesOf(["advice"])) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+          const data = await fetch("https://api.adviceslip.com/advice")
+          .then(res => res.json())
+          .catch(() => null);
+
+          if (!data) {
+            message.inlineReply(["I'm not feeling good, ask again...", "Watch GawrGura videos, it wll heal your bad mood", "Don't be sad, be Happy!"].random(), { allowedMentions: { repliedUser: false } }); 
+          } else {
+            message.inlineReply(data.slip.advice, { allowedMentions: { repliedUser: false } });
+          }
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        if(text.includesOf(["charlie-", " charlie"])) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+          let answer = ["yes", "no"].random();
+          let embed = new Discord.MessageEmbed()
+          .setColor(message.client.color.none)
+          .setDescription(`\`\`\`
+          ${answer === "no" ? "\\" : " "}  |  ${answer === "yes" ? "/" : " "}
+          NO ${answer === "no" ? "\\" : " "} | ${answer === "yes" ? "/" : " "}YES
+          ${answer === "no" ? "\\" : " "}|${answer === "yes" ? "/" : " "}
+          ————————————————
+          ${answer === "yes" ? "/" : " "}|${answer === "no" ? "\\" : " "}
+          YES${answer === "yes" ? "/" : " "} | ${answer === "no" ? "\\" : " "}NO
+          ${answer === "yes" ? "/" : " "}  |  ${answer === "no" ? "\\" : " "}
+          \`\`\``)
+          message.channel.send(embed);
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        if(text.includesOf(["fortune", "horoscope"])) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+          message.inlineReply([
+          "Today it's up to you to create the peacefulness you long for.",
+          "A friend asks only for your time not your money.",
+          "If you refuse to accept anything but the best, you very often get it.",
+          "A smile is your passport into the hearts of others.",
+          "A good way to keep healthy is to eat more Chinese food.",
+          "Your high-minded principles spell success.",
+          "Hard work pays off in the future, laziness pays off now.",
+          "Change can hurt, but it leads a path to something better.",
+          "Enjoy the good luck a companion brings you.",
+          "People are naturally attracted to you.",
+          "Hidden in a valley beside an open stream- This will be the type of place where you will find your dream.",
+          "A chance meeting opens new doors to success and friendship.",
+          "You learn from your mistakes... You will learn a lot today.",
+          "If you have something good in your life, don't let it go!",
+          "What ever you're goal is in life, embrace it visualize it, and for it will be yours.",
+          "Your shoes will make you happy today.",
+          "You cannot love life until you live the life you love.",
+          "Be on the lookout for coming events; They cast their shadows beforehand.",
+          "Land is always on the mind of a flying bird.",
+          "The man or woman you desire feels the same about you.",
+          "Meeting adversity well is the source of your strength.",
+          "A dream you have will come true.",
+          "Our deeds determine us, as much as we determine our deeds.",
+          "Never give up. You're not a failure if you don't give up.",
+          "You will become great if you believe in yourself.",
+          "There is no greater pleasure than seeing your loved ones prosper.",
+          "You will marry your lover.",
+          "A very attractive person has a message for you.",
+          "You already know the answer to the questions lingering inside your head.",
+          "It is now, and in this world, that we must live.",
+          "You must try, or hate yourself for not trying.",
+          "You can make your own happiness.",
+          "The greatest risk is not taking one.",
+          "The love of your life is stepping into your planet this summer.",
+          "Love can last a lifetime, if you want it to.",
+          "Adversity is the parent of virtue.",
+          "Serious trouble will bypass you.",
+          "A short stranger will soon enter your life with blessings to share.",
+          "Now is the time to try something new.",
+          "Wealth awaits you very soon.",
+          "If you feel you are right, stand firmly by your convictions.",
+          "If winter comes, can spring be far behind?",
+          "Keep your eye out for someone special.",
+          "You are very talented in many ways.",
+          "A stranger, is a friend you have not spoken to yet.",
+          "A new voyage will fill your life with untold memories.",
+          "You will travel to many exotic places in your lifetime.",
+          "Your ability for accomplishment will follow with success.",
+          "Nothing astonishes men so much as common sense and plain dealing.",
+          "Its amazing how much good you can do if you dont care who gets the credit.",
+          "Everyone agrees. You are the best.",
+          "LIFE CONSIST NOT IN HOLDING GOOD CARDS, BUT IN PLAYING THOSE YOU HOLD WELL.",
+          "Jealousy doesn't open doors, it closes them!",
+          "It's better to be alone sometimes.",
+          "When fear hurts you, conquer it and defeat it!",
+          "Let the deeds speak.",
+          "You will be called in to fulfill a position of high honor and responsibility.",
+          "The man on the top of the mountain did not fall there.",
+          "You will conquer obstacles to achieve success.",
+          "Joys are often the shadows, cast by sorrows.",
+          "Fortune favors the brave.",
+          "An upward movement initiated in time can counteract fate.",
+          "A journey of a thousand miles begins with a single step.",
+          "Sometimes you just need to lay on the floor.",
+          "Never give up. Always find a reason to keep trying.",
+          "If you have something worth fighting for, then fight for it.",
+          "Stop wishing. Start doing.",
+          "Accept your past without regrets. Handle your present with confidence. Face your future without fear.",
+          "Stay true to those who would do the same for you.",
+          "Ask yourself if what you are doing today is getting you closer to where you want to be tomorrow.",
+          "Happiness is an activity.",
+          "Help is always needed but not always appreciated. Stay true to your heart and help those in need weather they appreciate it or not.",
+          "Hone your competitive instincts.",
+          "Finish your work on hand don't be greedy.",
+          "For success today, look first to yourself.",
+          "Your fortune is as sweet as a cookie.",
+          "Integrity is the essence of everything successful.",
+          "If you're happy, you're successful.",
+          "You will always be surrounded by true friends.",
+          "Believing that you are beautiful will make you appear beautiful to others around you.",
+          "Happinees comes from a good life.",
+          "Before trying to please others think of what makes you happy.",
+          "When hungry, order more Chinese food.",
+          "Your golden opportunity is coming shortly.",
+          "For hate is never conquered by hate. Hate is conquered by love.",
+          "You will make many changes before settling down happily.",
+          "A man is born to live and not prepare to live.",
+          "You cannot become rich except by enriching others.",
+          "Don't pursue happiness - create it.",
+          "You will be successful in love.",
+          "All your fingers can't be of the same length.",
+          "Wise sayings often fall on barren ground, but a kind word is never thrown away.",
+          "A lifetime of happiness is in store for you.",
+          "It is very possible that you will achieve greatness in your lifetime.",
+          "Be tactful; overlook your own opportunity.",
+          "You are the controller of your destiny.",
+          "Everything happens for a reason.",
+          "How can you have a beautiful ending without making beautiful mistakes?",
+          "Welcome the change coming into your life.",
+          "You can open doors with your charm and patience.",
+          "You will eat pant today.",
+          ].random(), { allowedMentions: { repliedUser: false } });
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        const prefixRegex = ["(( *)prefix( *))"];
+        const prefixMention = new RegExp(prefixRegex.join("|"), "i");
+        if(text.match(prefixMention)) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+          if(text.includesOf(["please", "tell"])){
+            message.inlineReply([
+            `Ok, ok... my prefix is \`\`${serverPrefix ? serverPrefix : `@${message.client.user.username.toLowerCase()}`}\`\``,
+            `Chill bruh.. Hahahahaha, my prefix is \`\`${serverPrefix ? serverPrefix : `@${message.client.user.username.toLowerCase()}`}\`\``,
+            `Don"t be angry on me, im just joking.. \`\`${serverPrefix ? serverPrefix : `@${message.client.user.username.toLowerCase()}`}\`\` is my prefix.`,
+            `Sures, don"t be sad... my prefix is \`\`${serverPrefix ? serverPrefix : `@${message.client.user.username.toLowerCase()}`}\`\` `
+            ].random(), { allowedMentions: { repliedUser: false } });
+          } else {
+            message.inlineReply([
+            "Ask again later.",
+            "My reply is no.",
+            "If you gonna beg to me, i gonna say my prefix.",
+            "My sources say no.",
+            "Better not tell you now.",
+            "Reply hazy, try again.",
+            "No way, I'm gonna say my prefix."
+            ].random(), { allowedMentions: { repliedUser: false } });
+          }
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        if(text && text.match(mention)) {
+          // Add a 2s delay
+          await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+          message.inlineReply([
+          "Why do you need to mention that person here?", 
+          "Don't mention anybody because they'll be angry at what you've done.",
+          "Please refrain from mentioning someone."].random(), { allowedMentions: { repliedUser: false } });
+
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.channel.stopTyping();
+        }
+
+        // Get a response from the bot via api
+        const alexa = require("alexa-bot-api");
+        const ai = new  alexa();
+        const reply = await ai.getReply(encodeURI(text)).catch(() => {});
+        console.log(reply)
+        // Add a 2s delay
+        await new Promise(resolve => setTimeout(resolve, ms(cooldown)));
+
+        if(!text) {
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+          return message.inlineReply(
+          ["How may I help you?", "What can I do to assist you?", "What can I do for you?"].random()
+          , { allowedMentions: { repliedUser: true } }).then(() => {
+            return message.channel.stopTyping();
+          }).catch(() => {
+            return message.channel.stopTyping();
+          });
+        } else {
+          if(typeof reply !== "string") {
+            if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+              await message.channel.setRateLimitPerUser(type("clear") / 1000);
+            }
+            return message.inlineReply(
+            ["What?", "Huh?", "I don't understand.", "Speak up, please."].random()
+            , { allowedMentions: { repliedUser: false } }).then(() => {
+              return message.channel.stopTyping();
+            }).catch(() => {
+              return message.channel.stopTyping();
+            });
+          };
+
+        // send the response
+          if (message.guild.me.permissionsIn(message.channel).has("MANAGE_CHANNELS")) {
+            await message.channel.setRateLimitPerUser(type("clear") / 1000);
+          }
+          return message.inlineReply(reply, { allowedMentions: { repliedUser: false } }).then(() => {
+            return message.channel.stopTyping();
+          }).catch(() => {
+            return message.channel.stopTyping();
+          });
+        }
+    })
+  } catch (e) {
+  client.util.Log().error("Chat Alexa Module", `${e.name}: ${e.stack}`);
+  }
+}
